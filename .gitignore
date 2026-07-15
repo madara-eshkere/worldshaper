@@ -1,3 +1,6 @@
+# Dev tools live in-project but never in the repo
+tools/
+
 # Godot
 game/.godot/
 game/export/
