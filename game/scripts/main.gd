@@ -8,6 +8,10 @@ const NarratorUIScript := preload("res://scripts/narrator_ui.gd")
 
 
 func _ready() -> void:
+	# Cap FPS: a turn-based 2D game has no business burning the GPU, and it
+	# keeps headless test runs on real wall-clock time.
+	Engine.max_fps = 60
+
 	var grid: Node2D = WorldGridScript.new()
 	grid.name = "WorldGrid"
 	add_child(grid)
