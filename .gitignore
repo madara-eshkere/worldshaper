@@ -6,10 +6,16 @@ game/.godot/
 game/export/
 *.import
 
+# Build output
+build/
+
 # Python
 sidecar/.venv/
 __pycache__/
 *.pyc
+
+# Sidecar runtime log
+sidecar.log
 
 # Secrets — never commit keys
 .env
