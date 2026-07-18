@@ -4,6 +4,7 @@ extends Node2D
 
 const MOVE_TWEEN_SEC := 0.11
 const STUN_TURNS_IN_PIT := 2
+const STUN_TICK_SEC := 0.35  # real time between auto-skipped stun turns
 
 var grid: Node2D
 var cell := Vector2i(2, 2)
@@ -11,11 +12,23 @@ var stunned_turns := 0
 var in_pit := false
 
 var _tween: Tween
+var _stun_accum := 0.0
 
 
 func setup(world_grid: Node2D) -> void:
 	grid = world_grid
 	position = grid.cell_to_px(cell)
+
+
+func _process(delta: float) -> void:
+	# Auto-skip: a stunned/incapacitated player's turns tick by themselves, so the
+	# player never has to mash keys to wait out a stun. Input stays blocked
+	# meanwhile (see _unhandled_input).
+	if stunned_turns > 0:
+		_stun_accum += delta
+		if _stun_accum >= STUN_TICK_SEC:
+			_stun_accum = 0.0
+			_tick_stun()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -24,8 +37,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Ignore input mid-glide so a held key can't queue phantom turns.
 	if _tween and _tween.is_running():
 		return
+	# Stunned: the player can't act; _process auto-skips the turns. Swallow input.
+	if stunned_turns > 0:
+		return
 	if event.is_action("interact"):
 		_interact()
+		return
+	if event.is_action("wait"):
+		_wait()
 		return
 	var step := Vector2i.ZERO
 	if event.is_action("move_up"):
@@ -69,6 +88,15 @@ func _interact() -> void:
 	EventBus.emit_game_event("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
 
 
+func _wait() -> void:
+	# Spend a turn doing nothing (spacebar). Blocked while stunned (defense in depth).
+	if stunned_turns > 0:
+		_tick_stun()
+		return
+	TurnManager.advance()
+	EventBus.emit_game_event("player_waited", {"cell_x": cell.x, "cell_y": cell.y})
+
+
 func _tick_stun() -> void:
 	# Each key press while stunned burns one turn doing nothing. When the stun
 	# runs out in the pit, the player climbs out automatically — so a 2-turn stun
@@ -87,6 +115,7 @@ func _tick_stun() -> void:
 func _fall_into_pit() -> void:
 	in_pit = true
 	stunned_turns = STUN_TURNS_IN_PIT
+	_stun_accum = 0.0
 	grid.reveal_pit()
 	modulate = Color(0.55, 0.55, 0.62)  # dimmed: player is down in the dark
 	EventBus.emit_game_event("fell_into_pit", {"stun_turns": STUN_TURNS_IN_PIT})

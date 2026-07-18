@@ -5,6 +5,7 @@ extends Node2D
 const WorldGridScript := preload("res://scripts/world_grid.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const NarratorUIScript := preload("res://scripts/narrator_ui.gd")
+const DebugHudScript := preload("res://scripts/debug_hud.gd")
 
 
 func _ready() -> void:
@@ -25,6 +26,10 @@ func _ready() -> void:
 	var ui: CanvasLayer = NarratorUIScript.new()
 	ui.name = "NarratorUI"
 	add_child(ui)
+
+	var hud: CanvasLayer = DebugHudScript.new()
+	hud.name = "DebugHud"
+	add_child(hud)
 
 	# Center the playfield in the window.
 	var playfield: Vector2 = Vector2(grid.GRID_W, grid.GRID_H) * grid.CELL

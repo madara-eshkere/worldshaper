@@ -71,9 +71,31 @@ func _ready() -> void:
 	_expect(player.stunned_turns == 0, "T6 stunned=%d (want 0)" % player.stunned_turns)
 	_expect(_last() == "climbed_out_of_pit", "T6 expected climbed_out_of_pit, got %s" % _last())
 
+	# T7 — spacebar wait spends exactly one turn.
+	player.in_pit = false
+	player.stunned_turns = 0
+	TurnManager.turn = 0
+	_events.clear()
+	player._wait()
+	_expect(TurnManager.turn == 1, "T7 wait turn=%d (want 1)" % TurnManager.turn)
+	_expect(_last() == "player_waited", "T7 expected player_waited, got %s" % _last())
+
+	# T8 — auto-skip: _process ticks a pit stun to zero with no key presses.
+	player.cell = Vector2i(grid.PIT_CELL.x - 1, grid.PIT_CELL.y)
+	player.in_pit = false
+	player.stunned_turns = 0
+	player._try_step(Vector2i.RIGHT)  # fall in → stunned 2
+	_expect(player.stunned_turns == 2, "T8 setup stunned=%d (want 2)" % player.stunned_turns)
+	_events.clear()
+	for _i in range(3):
+		player._process(player.STUN_TICK_SEC)
+	_expect(not player.in_pit, "T8 auto-skip did not climb out")
+	_expect(player.stunned_turns == 0, "T8 auto-skip left stun=%d" % player.stunned_turns)
+	_expect(_events.has("climbed_out_of_pit"), "T8 expected auto climb, events=%s" % str(_events))
+
 	print("\n===== TURN-LOOP TEST =====")
 	if _fails.is_empty():
-		print("ALL PASS (T1-T6)")
+		print("ALL PASS (T1-T8)")
 	else:
 		for f in _fails:
 			print("FAIL  " + f)
