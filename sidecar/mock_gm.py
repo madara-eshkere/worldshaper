@@ -30,12 +30,6 @@ _LINES: dict[str, list[str]] = {
     ],
 }
 
-_FALLBACK = [
-    "Занятно. Продолжайте.",
-    "Я это видел. Я всё вижу.",
-]
-
-
 class MockGM:
     """Cycles through canned lines per event name; thin stand-in for the Director."""
 
@@ -45,14 +39,16 @@ class MockGM:
     def react(self, event: Event) -> str | None:
         """Return a narration line for the event, or None to stay silent.
 
-        Mimics the trigger discipline: the mock only 'speaks' on events it has
-        lines for; player_moved replies are throttled to every 5th step so the
-        pipeline demo doesn't spam.
+        The GM is silent by default (ADR-0011): it speaks ONLY on events it has
+        explicit lines for. Events like bumped_wall / stun_tick / climbed_out_of_pit
+        have no lines and produce no narration — no catch-all fallback, or the mock
+        would comment on every twitch. player_moved is throttled to every 5th step.
         """
+        lines = _LINES.get(event.name)
+        if lines is None:
+            return None
         if event.name == "player_moved" and event.turn % 5 != 0:
             return None
-        lines = _LINES.get(event.name)
-        key = event.name if lines else "__fallback__"
-        if key not in self._iters:
-            self._iters[key] = cycle(lines if lines else _FALLBACK)
-        return next(self._iters[key])
+        if event.name not in self._iters:
+            self._iters[event.name] = cycle(lines)
+        return next(self._iters[event.name])
