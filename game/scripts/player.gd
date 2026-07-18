@@ -21,6 +21,12 @@ func setup(world_grid: Node2D) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_pressed() or event.is_echo():
 		return
+	# Ignore input mid-glide so a held key can't queue phantom turns.
+	if _tween and _tween.is_running():
+		return
+	if event.is_action("interact"):
+		_interact()
+		return
 	var step := Vector2i.ZERO
 	if event.is_action("move_up"):
 		step = Vector2i.UP
@@ -30,38 +36,52 @@ func _unhandled_input(event: InputEvent) -> void:
 		step = Vector2i.LEFT
 	elif event.is_action("move_right"):
 		step = Vector2i.RIGHT
-	elif event.is_action("interact"):
-		_interact()
-		return
 	if step != Vector2i.ZERO:
 		_try_step(step)
 
 
 func _try_step(step: Vector2i) -> void:
-	if _tween and _tween.is_running():
-		return
-	var turn := TurnManager.advance()
+	# B-003: stun gates EVERY action — a stunned player can only wait it out.
 	if stunned_turns > 0:
-		stunned_turns -= 1
-		EventBus.emit_game_event("stun_tick", {"remaining": stunned_turns})
+		_tick_stun()
 		return
-	if in_pit:
-		# M0 placeholder: climbing out is a free action; the real check-based
-		# scripted trigger (dex/con roll) is M1 work.
-		in_pit = false
-		EventBus.emit_game_event("climbed_out_of_pit", {})
-		modulate = Color.WHITE
-		return
+	# B-001: bumping a wall is a no-op — it must NOT consume a turn. Check
+	# walkability BEFORE advancing the turn counter.
 	var target := cell + step
 	if not grid.is_walkable(target):
 		EventBus.emit_game_event("bumped_wall", {"cell_x": target.x, "cell_y": target.y})
 		return
+	TurnManager.advance()
 	cell = target
 	_glide_to(grid.cell_to_px(cell))
-	if cell == grid.PIT_CELL and not in_pit:
+	if cell == grid.PIT_CELL:
 		_fall_into_pit()
 	else:
 		EventBus.emit_game_event("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
+
+
+func _interact() -> void:
+	# B-003: interaction is an action too — blocked while stunned.
+	if stunned_turns > 0:
+		_tick_stun()
+		return
+	TurnManager.advance()
+	EventBus.emit_game_event("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
+
+
+func _tick_stun() -> void:
+	# Each key press while stunned burns one turn doing nothing. When the stun
+	# runs out in the pit, the player climbs out automatically — so a 2-turn stun
+	# costs 2 presses, not 3 (B-002). M1 replaces this placeholder with a proper
+	# check-based "climb out" Declared action (dex/con roll).
+	TurnManager.advance()
+	stunned_turns -= 1
+	if stunned_turns <= 0 and in_pit:
+		in_pit = false
+		modulate = Color.WHITE
+		EventBus.emit_game_event("climbed_out_of_pit", {})
+	else:
+		EventBus.emit_game_event("stun_tick", {"remaining": stunned_turns})
 
 
 func _fall_into_pit() -> void:
@@ -70,11 +90,6 @@ func _fall_into_pit() -> void:
 	grid.reveal_pit()
 	modulate = Color(0.55, 0.55, 0.62)  # dimmed: player is down in the dark
 	EventBus.emit_game_event("fell_into_pit", {"stun_turns": STUN_TURNS_IN_PIT})
-
-
-func _interact() -> void:
-	TurnManager.advance()
-	EventBus.emit_game_event("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
 
 
 func _glide_to(target_px: Vector2) -> void:
