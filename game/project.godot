@@ -15,6 +15,7 @@ config/features=PackedStringArray("4.7")
 
 EventBus="*res://scripts/event_bus.gd"
 TurnManager="*res://scripts/turn_manager.gd"
+World="*res://scripts/world_state.gd"
 SidecarClient="*res://scripts/sidecar_client.gd"
 
 [display]
