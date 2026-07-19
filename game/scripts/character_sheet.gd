@@ -28,6 +28,10 @@ static func create(id: String, race: String, cls: String, abilities: Dictionary,
 	var hp := hp_for(cls, int(props["con"]), level)
 	props["hp_max"] = hp
 	props["hp"] = hp
+	# Derived combat stats + empty inventory (used by combat.gd / pickups, #7).
+	props["atk"] = 2 + D20.ability_mod(int(props["str"]))
+	props["def"] = 10 + D20.ability_mod(int(props["dex"]))
+	props["inventory"] = []
 	if World.has(id):
 		for k in props:
 			World.set_prop(id, k, props[k])

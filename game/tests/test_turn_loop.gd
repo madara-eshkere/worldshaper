@@ -49,13 +49,13 @@ func _ready() -> void:
 	_player._try_step(Vector2i.RIGHT)
 	_expect(TurnManager.turn == 1, "T2 move turn=%d (want 1)" % TurnManager.turn)
 	_expect(_player.cell == Vector2i(3, 2), "T2 player did not move")
-	_expect(_last() == "player_moved", "T2 expected player_moved, got %s" % _last())
+	_expect(_events.has("player_moved"), "T2 expected player_moved, got %s" % str(_events))
 
 	# T3 — interact consumes a turn when not stunned (B-004: it DOES).
 	_reset(Vector2i(3, 2))
 	_player._interact()
 	_expect(TurnManager.turn == 1, "T3 interact turn=%d (want 1)" % TurnManager.turn)
-	_expect(_last() == "player_interacted", "T3 expected player_interacted, got %s" % _last())
+	_expect(_events.has("player_interacted"), "T3 expected player_interacted, got %s" % str(_events))
 
 	# T4 — stepping onto the pit fires the trigger: fall, stun 2, step spends a turn.
 	_reset(Vector2i(_grid.PIT_CELL.x - 1, _grid.PIT_CELL.y))
@@ -63,14 +63,14 @@ func _ready() -> void:
 	_expect(_in_pit(), "T4 not in pit after stepping onto it")
 	_expect(_stun() == 2, "T4 stunned=%d (want 2)" % _stun())
 	_expect(TurnManager.turn == 1, "T4 step turn=%d (want 1)" % TurnManager.turn)
-	_expect(_last() == "fell_into_pit", "T4 expected fell_into_pit, got %s" % _last())
+	_expect(_events.has("fell_into_pit"), "T4 expected fell_into_pit, got %s" % str(_events))
 
 	# T5 — interaction is blocked while stunned (B-003): it ticks the stun, no interact.
 	_events.clear()
 	var turn_before: int = TurnManager.turn
 	_player._interact()
 	_expect(not _events.has("player_interacted"), "T5 interact worked during stun (B-003)")
-	_expect(_last() == "stun_tick", "T5 blocked interact should tick stun, got %s" % _last())
+	_expect(_events.has("stun_tick"), "T5 blocked interact should tick stun, got %s" % str(_events))
 	_expect(_stun() == 1, "T5 stun did not tick (%d)" % _stun())
 	_expect(TurnManager.turn == turn_before + 1, "T5 stun tick should consume a turn")
 
@@ -79,13 +79,13 @@ func _ready() -> void:
 	_player._try_step(Vector2i.RIGHT)
 	_expect(not _in_pit(), "T6 still in pit after stun expired")
 	_expect(_stun() == 0, "T6 stunned=%d (want 0)" % _stun())
-	_expect(_last() == "climbed_out_of_pit", "T6 expected climbed_out_of_pit, got %s" % _last())
+	_expect(_events.has("climbed_out_of_pit"), "T6 expected climbed_out_of_pit, got %s" % str(_events))
 
 	# T7 — spacebar wait spends exactly one turn.
 	_reset(Vector2i(2, 2))
 	_player._wait()
 	_expect(TurnManager.turn == 1, "T7 wait turn=%d (want 1)" % TurnManager.turn)
-	_expect(_last() == "player_waited", "T7 expected player_waited, got %s" % _last())
+	_expect(_events.has("player_waited"), "T7 expected player_waited, got %s" % str(_events))
 
 	# T8 — auto-skip: _process ticks a pit stun to zero with no key presses.
 	_reset(Vector2i(_grid.PIT_CELL.x - 1, _grid.PIT_CELL.y))

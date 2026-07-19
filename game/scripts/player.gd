@@ -5,6 +5,8 @@ extends Node2D
 ## Scripted Trigger (registered in main.gd) that fires on player_moved and runs
 ## the pit Mechanic, which sets the stun on the World object (ADR-0014).
 
+const Combat = preload("res://scripts/combat.gd")
+
 const MOVE_TWEEN_SEC := 0.11
 const STUN_TICK_SEC := 0.35  # real time between auto-skipped stun turns
 const DIM := Color(0.55, 0.55, 0.62)  # player is down in the dark
@@ -60,6 +62,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action("wait"):
 		_wait()
 		return
+	if event.is_action("use"):
+		_use_item()
+		return
 	var step := Vector2i.ZERO
 	if event.is_action("move_up"):
 		step = Vector2i.UP
@@ -78,25 +83,30 @@ func _try_step(step: Vector2i) -> void:
 	if _stun() > 0:
 		_tick_stun()
 		return
-	# B-001: bumping a wall is a no-op — it must NOT consume a turn.
 	var target := cell + step
+	# Bump-to-attack: stepping into an enemy attacks it instead of moving.
+	for oid in _prim.objects_at(target):
+		if "enemy" in _prim.get_object(oid).get("tags", []):
+			Combat.attack(_prim, "player", oid)
+			_end_turn("player_attacked", {"target": oid})
+			return
+	# B-001: bumping a wall is a no-op — it must NOT consume a turn.
 	if not grid.is_walkable(target):
 		EventBus.emit_game_event("bumped_wall", {"cell_x": target.x, "cell_y": target.y})
 		return
-	TurnManager.advance()
 	cell = target
 	_prim.move_to("player", cell)  # position lives in the World object
 	_glide_to(grid.cell_to_px(cell))
+	_pickup(cell)
 	# A pit Scripted Trigger listens on player_moved and reacts if this cell is one.
-	EventBus.emit_game_event("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
+	_end_turn("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
 
 
 func _interact() -> void:
 	if _stun() > 0:
 		_tick_stun()
 		return
-	TurnManager.advance()
-	EventBus.emit_game_event("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
+	_end_turn("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
 
 
 func _wait() -> void:
@@ -104,8 +114,35 @@ func _wait() -> void:
 	if _stun() > 0:
 		_tick_stun()
 		return
-	TurnManager.advance()
-	EventBus.emit_game_event("player_waited", {"cell_x": cell.x, "cell_y": cell.y})
+	_end_turn("player_waited", {"cell_x": cell.x, "cell_y": cell.y})
+
+
+func _use_item() -> void:
+	if _stun() > 0:
+		_tick_stun()
+		return
+	var inv: Array = _prim.get_prop("player", "inventory", [])
+	for i in inv.size():
+		var item: Dictionary = inv[i]
+		if item.has("heal"):
+			_prim.heal("player", int(item["heal"]))
+			var rest := inv.duplicate()
+			rest.remove_at(i)
+			_prim.set_prop("player", "inventory", rest)
+			_end_turn("used_item", {"item": item.get("name", "зелье")})
+			return
+	_prim.emit("nothing_to_use", {})  # no usable item — not a turn
+
+
+func _pickup(at: Vector2i) -> void:
+	for oid in _prim.objects_at(at):
+		var obj: Dictionary = _prim.get_object(oid)
+		if "item" in obj.get("tags", []):
+			var inv: Array = _prim.get_prop("player", "inventory", []).duplicate()
+			inv.append(obj.get("props", {}))
+			_prim.set_prop("player", "inventory", inv)
+			_prim.despawn(oid)
+			_prim.emit("picked_up", {"item": obj.get("props", {}).get("name", "предмет")})
 
 
 func _tick_stun() -> void:
@@ -120,6 +157,15 @@ func _tick_stun() -> void:
 		EventBus.emit_game_event("climbed_out_of_pit", {})
 	else:
 		EventBus.emit_game_event("stun_tick", {"remaining": s})
+	EventBus.emit_game_event("player_turn_ended", {})  # enemies act while you're stunned
+
+
+func _end_turn(event_name: String, data: Dictionary) -> void:
+	# One player action = one turn. Emit the action event, then signal end-of-turn
+	# so the enemy controller can act (ADR-0007).
+	TurnManager.advance()
+	EventBus.emit_game_event(event_name, data)
+	EventBus.emit_game_event("player_turn_ended", {})
 
 
 func _glide_to(target_px: Vector2) -> void:

@@ -12,6 +12,8 @@ const CharacterSheetUIScript := preload("res://scripts/character_sheet_ui.gd")
 const PrimitivesScript := preload("res://scripts/primitives.gd")
 const MechanicRunnerScript := preload("res://scripts/mechanic_runner.gd")
 const TriggerSystemScript := preload("res://scripts/trigger_system.gd")
+const EnemyControllerScript := preload("res://scripts/enemy_controller.gd")
+const EntityRendererScript := preload("res://scripts/entity_renderer.gd")
 
 const START_CELL := Vector2i(2, 2)
 
@@ -40,6 +42,19 @@ func _ready() -> void:
 	add_child(triggers)
 	triggers.setup(_prim, runner)
 	_install_pit(triggers, grid.PIT_CELL)
+	_install_encounter()
+
+	# Enemies take their turn after each player turn (ADR-0007).
+	var enemies: Node = EnemyControllerScript.new()
+	enemies.name = "EnemyController"
+	add_child(enemies)
+	enemies.setup(_prim)
+
+	# Entity view (enemies/items), under the player so the player draws on top.
+	var entities: Node2D = EntityRendererScript.new()
+	entities.name = "Entities"
+	grid.add_child(entities)
+	entities.setup(grid)
 
 	# Player view node (reads its data from the World "player" object).
 	var player: Node2D = PlayerScript.new()
@@ -47,8 +62,9 @@ func _ready() -> void:
 	grid.add_child(player)
 	player.setup(grid, _prim)
 
-	# Light the fog around the starting cell before the first move.
+	# Light the fog around the starting cell, then draw the now-visible entities.
 	grid.reveal_from(START_CELL)
+	entities.queue_redraw()
 
 	var ui: CanvasLayer = NarratorUIScript.new()
 	ui.name = "NarratorUI"
@@ -86,3 +102,11 @@ func _install_pit(triggers: Node, pit_cell: Vector2i) -> void:
 		"id": "pit_frustration", "watch": "fell_into_pit", "threshold": 3,
 		"emit": "pit_escalation",
 	})
+
+
+## One hardcoded encounter: a goblin to fight and a potion to find (M1; M2 lets the
+## Director place these as scenario data).
+func _install_encounter() -> void:
+	_prim.spawn("enemy", Vector2i(9, 6), {"hp": 6, "atk": 3, "def": 11, "name": "гоблин"},
+			["enemy", "blocking"])
+	_prim.spawn("item", Vector2i(6, 3), {"name": "зелье лечения", "heal": 5}, ["item"])

@@ -42,6 +42,14 @@ func reveal_from(cell: Vector2i) -> void:
 		queue_redraw()
 
 
+func fog_state_at(cell: Vector2i) -> int:
+	return _fog.state_at(cell) if _fog else FogOfWar.VISIBLE
+
+
+func is_cell_visible(cell: Vector2i) -> bool:
+	return fog_state_at(cell) == FogOfWar.VISIBLE
+
+
 func is_wall(cell: Vector2i) -> bool:
 	return cell.x <= 0 or cell.y <= 0 or cell.x >= GRID_W - 1 or cell.y >= GRID_H - 1
 
