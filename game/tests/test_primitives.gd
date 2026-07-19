@@ -15,7 +15,7 @@ func _ready() -> void:
 	var p = Primitives.new(grid, 12345)  # fixed seed → deterministic rolls
 
 	World.clear()
-	World.add_object("player", "player", Vector2i(2, 2), {"hp": 10, "athletics": 5}, [])
+	World.add_object("player", "player", Vector2i(2, 2), {"hp": 10, "str": 20}, [])
 
 	# spawn returns an id, object is queryable
 	var tid: String = p.spawn("prop", Vector2i(3, 3), {"hp": 4}, ["blocking", "flammable"])
@@ -60,10 +60,10 @@ func _ready() -> void:
 	_expect(p.distance(Vector2i(2, 2), Vector2i(4, 3)) == 3, "manhattan distance wrong")
 	_expect(p.player_cell() == Vector2i(2, 2), "player_cell wrong")
 
-	# roll_check: modifier dominates at the extremes (mod 5 vs DC 1 always passes,
-	# mod 0 vs DC 100 always fails), and a fixed seed is reproducible.
-	_expect(p.roll_check("player", "athletics", 1), "trivial check should pass")
-	_expect(not p.roll_check("player", "athletics", 100), "impossible check should fail")
+	# roll_check: the ability modifier dominates at the extremes — str 20 (mod +5)
+	# vs DC 1 always passes, vs DC 100 always fails.
+	_expect(p.roll_check("player", "str", 1), "trivial check should pass")
+	_expect(not p.roll_check("player", "str", 100), "impossible check should fail")
 
 	# garbage args never crash, just fail safely
 	_expect(p.get_prop("nope", "hp", -1) == -1, "get_prop on missing id should return default")

@@ -6,6 +6,8 @@ const WorldGridScript := preload("res://scripts/world_grid.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const NarratorUIScript := preload("res://scripts/narrator_ui.gd")
 const DebugHudScript := preload("res://scripts/debug_hud.gd")
+const CharacterSheet := preload("res://scripts/character_sheet.gd")
+const CharacterSheetUIScript := preload("res://scripts/character_sheet_ui.gd")
 
 
 func _ready() -> void:
@@ -23,6 +25,11 @@ func _ready() -> void:
 	grid.add_child(player)
 	player.setup(grid)
 
+	# Create the World "player" data object (stats live here — ADR-0013). The
+	# movement node above stays a separate view for now; #5 unifies them.
+	World.clear()
+	CharacterSheet.create_default(player.cell)
+
 	var ui: CanvasLayer = NarratorUIScript.new()
 	ui.name = "NarratorUI"
 	add_child(ui)
@@ -30,6 +37,10 @@ func _ready() -> void:
 	var hud: CanvasLayer = DebugHudScript.new()
 	hud.name = "DebugHud"
 	add_child(hud)
+
+	var sheet_ui: CanvasLayer = CharacterSheetUIScript.new()
+	sheet_ui.name = "CharacterSheetUI"
+	add_child(sheet_ui)
 
 	# Center the playfield in the window.
 	var playfield: Vector2 = Vector2(grid.GRID_W, grid.GRID_H) * grid.CELL

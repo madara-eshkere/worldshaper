@@ -7,6 +7,8 @@ extends RefCounted
 ## (false / "" / default) plus a `primitive_rejected` event — it must NEVER crash,
 ## because a guest can call it with anything.
 
+const D20 = preload("res://scripts/d20.gd")
+
 var _grid: Node  # provides is_walkable(cell)
 var _rng := RandomNumberGenerator.new()
 var _next_id := 1
@@ -147,11 +149,13 @@ func heal(id: String, amount: int) -> bool:
 
 # --- Rules / events ---
 
-func roll_check(actor_id: String, skill: String, dc: int) -> bool:
-	# Invisible dice (ADR-0008): d20 + skill modifier vs DC. Player never sees it.
-	var modifier := int(get_prop(actor_id, skill, 0))
+func roll_check(actor_id: String, ability: String, dc: int) -> bool:
+	# Invisible dice (ADR-0008): d20 + ability modifier vs DC. The player sees
+	# only the narrative outcome, never the roll. `ability` names a d20 stat
+	# (str/dex/con/int/wis/cha); a missing actor defaults to a neutral score 10.
+	var score := int(get_prop(actor_id, ability, 10))
 	var roll := _rng.randi_range(1, 20)
-	return roll + modifier >= dc
+	return roll + D20.ability_mod(score) >= dc
 
 
 func emit(name: String, data: Dictionary = {}) -> void:
