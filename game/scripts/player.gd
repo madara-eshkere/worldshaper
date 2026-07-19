@@ -86,9 +86,14 @@ func _try_step(step: Vector2i) -> void:
 	var target := cell + step
 	# Bump-to-attack: stepping into an enemy attacks it instead of moving.
 	for oid in _prim.objects_at(target):
-		if "enemy" in _prim.get_object(oid).get("tags", []):
+		var tags: Array = _prim.get_object(oid).get("tags", [])
+		if "enemy" in tags:
 			Combat.attack(_prim, "player", oid)
 			_end_turn("player_attacked", {"target": oid})
+			return
+		if "blocking" in tags:
+			# A blocking object (a table, a boulder) stops movement like a wall.
+			EventBus.emit_game_event("bumped_object", {"target": oid})
 			return
 	# B-001: bumping a wall is a no-op — it must NOT consume a turn.
 	if not grid.is_walkable(target):

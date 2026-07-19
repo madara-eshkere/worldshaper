@@ -50,8 +50,17 @@ func is_cell_visible(cell: Vector2i) -> bool:
 	return fog_state_at(cell) == FogOfWar.VISIBLE
 
 
+const DIVIDER_X := 8
+const DOORWAY_Y := 4
+
+
 func is_wall(cell: Vector2i) -> bool:
-	return cell.x <= 0 or cell.y <= 0 or cell.x >= GRID_W - 1 or cell.y >= GRID_H - 1
+	if cell.x <= 0 or cell.y <= 0 or cell.x >= GRID_W - 1 or cell.y >= GRID_H - 1:
+		return true
+	# Interior divider wall splitting the room, with one doorway (blocked by a table).
+	if cell.x == DIVIDER_X and cell.y != DOORWAY_Y:
+		return true
+	return false
 
 
 func is_walkable(cell: Vector2i) -> bool:

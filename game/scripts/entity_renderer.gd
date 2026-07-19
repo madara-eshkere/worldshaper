@@ -7,6 +7,8 @@ extends Node2D
 const COLOR_ENEMY := Color(0.75, 0.2, 0.22)
 const COLOR_ENEMY_EDGE := Color(0.35, 0.08, 0.1)
 const COLOR_ITEM := Color(0.45, 0.75, 0.4)
+const COLOR_TABLE := Color(0.5, 0.36, 0.22)
+const COLOR_EXIT := Color(0.4, 0.7, 0.95)
 
 var _grid: Node2D
 
@@ -32,9 +34,15 @@ func _draw() -> void:
 			continue  # unseen or remembered-but-dark: don't reveal live entities
 		var tags: Array = obj["tags"]
 		var center: Vector2 = _grid.cell_to_px(cell)
+		var half: float = _grid.CELL * 0.5
 		if "enemy" in tags:
 			draw_circle(center, _grid.CELL * 0.34, COLOR_ENEMY)
 			draw_circle(center, _grid.CELL * 0.34, COLOR_ENEMY_EDGE, false, 2.0)
+		elif "exit" in tags:
+			draw_rect(Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0), COLOR_EXIT, false, 3.0)
+		elif "table" in tags:
+			var t: float = _grid.CELL * 0.36
+			draw_rect(Rect2(center - Vector2(t, t), Vector2(t, t) * 2.0), COLOR_TABLE)
 		elif "item" in tags:
 			var s: float = _grid.CELL * 0.2
 			draw_rect(Rect2(center - Vector2(s, s), Vector2(s, s) * 2.0), COLOR_ITEM)
