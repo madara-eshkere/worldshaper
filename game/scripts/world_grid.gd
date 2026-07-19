@@ -15,6 +15,17 @@ const COLOR_PIT := Color(0.05, 0.05, 0.07)
 var pit_revealed := false
 
 
+func _ready() -> void:
+	# The grid is a view: it reveals the pit when the pit Mechanic fires (ADR-0013),
+	# rather than being told directly by the player.
+	EventBus.game_event.connect(_on_event)
+
+
+func _on_event(name: String, _data: Dictionary) -> void:
+	if name == "fell_into_pit":
+		reveal_pit()
+
+
 func is_wall(cell: Vector2i) -> bool:
 	return cell.x <= 0 or cell.y <= 0 or cell.x >= GRID_W - 1 or cell.y >= GRID_H - 1
 

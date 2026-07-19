@@ -1,30 +1,44 @@
 extends Node2D
-## Grid-locked player with smooth-turn movement (ADR-0007):
-## logic snaps cell-to-cell (one step = one turn), visuals glide between cells.
+## Grid-locked player with smooth-turn movement (ADR-0007). The player's data
+## (cell, stun, in_pit) lives in the World "player" object — this node is a view
+## over it (ADR-0013). Falling into a pit is no longer hardcoded here: it is a
+## Scripted Trigger (registered in main.gd) that fires on player_moved and runs
+## the pit Mechanic, which sets the stun on the World object (ADR-0014).
 
 const MOVE_TWEEN_SEC := 0.11
-const STUN_TURNS_IN_PIT := 2
 const STUN_TICK_SEC := 0.35  # real time between auto-skipped stun turns
+const DIM := Color(0.55, 0.55, 0.62)  # player is down in the dark
 
 var grid: Node2D
 var cell := Vector2i(2, 2)
-var stunned_turns := 0
-var in_pit := false
 
+var _prim
 var _tween: Tween
 var _stun_accum := 0.0
 
 
-func setup(world_grid: Node2D) -> void:
+func setup(world_grid: Node2D, primitives) -> void:
 	grid = world_grid
+	_prim = primitives
+	if World.has("player"):
+		cell = World.raw("player")["cell"]
 	position = grid.cell_to_px(cell)
 
 
+func _stun() -> int:
+	return int(_prim.get_prop("player", "stunned_turns", 0)) if _prim else 0
+
+
+func _in_pit() -> bool:
+	return bool(_prim.get_prop("player", "in_pit", false)) if _prim else false
+
+
 func _process(delta: float) -> void:
-	# Auto-skip: a stunned/incapacitated player's turns tick by themselves, so the
-	# player never has to mash keys to wait out a stun. Input stays blocked
-	# meanwhile (see _unhandled_input).
-	if stunned_turns > 0:
+	if _prim == null:
+		return
+	modulate = DIM if _in_pit() else Color.WHITE
+	# Auto-skip: a stunned player's turns tick by themselves; no key-mashing.
+	if _stun() > 0:
 		_stun_accum += delta
 		if _stun_accum >= STUN_TICK_SEC:
 			_stun_accum = 0.0
@@ -32,13 +46,13 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_pressed() or event.is_echo():
+	if _prim == null or not event.is_pressed() or event.is_echo():
 		return
 	# Ignore input mid-glide so a held key can't queue phantom turns.
 	if _tween and _tween.is_running():
 		return
 	# Stunned: the player can't act; _process auto-skips the turns. Swallow input.
-	if stunned_turns > 0:
+	if _stun() > 0:
 		return
 	if event.is_action("interact"):
 		_interact()
@@ -61,27 +75,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _try_step(step: Vector2i) -> void:
 	# B-003: stun gates EVERY action — a stunned player can only wait it out.
-	if stunned_turns > 0:
+	if _stun() > 0:
 		_tick_stun()
 		return
-	# B-001: bumping a wall is a no-op — it must NOT consume a turn. Check
-	# walkability BEFORE advancing the turn counter.
+	# B-001: bumping a wall is a no-op — it must NOT consume a turn.
 	var target := cell + step
 	if not grid.is_walkable(target):
 		EventBus.emit_game_event("bumped_wall", {"cell_x": target.x, "cell_y": target.y})
 		return
 	TurnManager.advance()
 	cell = target
+	_prim.move_to("player", cell)  # position lives in the World object
 	_glide_to(grid.cell_to_px(cell))
-	if cell == grid.PIT_CELL:
-		_fall_into_pit()
-	else:
-		EventBus.emit_game_event("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
+	# A pit Scripted Trigger listens on player_moved and reacts if this cell is one.
+	EventBus.emit_game_event("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
 
 
 func _interact() -> void:
-	# B-003: interaction is an action too — blocked while stunned.
-	if stunned_turns > 0:
+	if _stun() > 0:
 		_tick_stun()
 		return
 	TurnManager.advance()
@@ -89,8 +100,8 @@ func _interact() -> void:
 
 
 func _wait() -> void:
-	# Spend a turn doing nothing (spacebar). Blocked while stunned (defense in depth).
-	if stunned_turns > 0:
+	# Spend a turn doing nothing (spacebar).
+	if _stun() > 0:
 		_tick_stun()
 		return
 	TurnManager.advance()
@@ -98,27 +109,17 @@ func _wait() -> void:
 
 
 func _tick_stun() -> void:
-	# Each key press while stunned burns one turn doing nothing. When the stun
-	# runs out in the pit, the player climbs out automatically — so a 2-turn stun
-	# costs 2 presses, not 3 (B-002). M1 replaces this placeholder with a proper
-	# check-based "climb out" Declared action (dex/con roll).
+	# Burn one turn doing nothing. When the stun runs out in the pit, the player
+	# climbs out automatically — so a 2-turn stun costs 2 skips, not 3 (B-002).
+	# M1 placeholder; M4 replaces climbing with a check-based Declared action.
 	TurnManager.advance()
-	stunned_turns -= 1
-	if stunned_turns <= 0 and in_pit:
-		in_pit = false
-		modulate = Color.WHITE
+	var s := _stun() - 1
+	_prim.set_prop("player", "stunned_turns", s)
+	if s <= 0 and _in_pit():
+		_prim.set_prop("player", "in_pit", false)
 		EventBus.emit_game_event("climbed_out_of_pit", {})
 	else:
-		EventBus.emit_game_event("stun_tick", {"remaining": stunned_turns})
-
-
-func _fall_into_pit() -> void:
-	in_pit = true
-	stunned_turns = STUN_TURNS_IN_PIT
-	_stun_accum = 0.0
-	grid.reveal_pit()
-	modulate = Color(0.55, 0.55, 0.62)  # dimmed: player is down in the dark
-	EventBus.emit_game_event("fell_into_pit", {"stun_turns": STUN_TURNS_IN_PIT})
+		EventBus.emit_game_event("stun_tick", {"remaining": s})
 
 
 func _glide_to(target_px: Vector2) -> void:

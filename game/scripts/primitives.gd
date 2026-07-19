@@ -9,6 +9,14 @@ extends RefCounted
 
 const D20 = preload("res://scripts/d20.gd")
 
+## The callable vanilla alphabet — the ONLY method names a Mechanic (data) may
+## invoke through the interpreter (ADR-0014). Keep in sync with the funcs below.
+const PRIMITIVE_NAMES := [
+	"exists", "get_object", "get_prop", "objects_at", "find_by_tag", "is_walkable",
+	"player_cell", "distance", "spawn", "despawn", "move_to", "set_prop", "add_tag",
+	"remove_tag", "damage", "heal", "roll_check", "emit",
+]
+
 var _grid: Node  # provides is_walkable(cell)
 var _rng := RandomNumberGenerator.new()
 var _next_id := 1
