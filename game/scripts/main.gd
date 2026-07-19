@@ -47,6 +47,9 @@ func _ready() -> void:
 	grid.add_child(player)
 	player.setup(grid, _prim)
 
+	# Light the fog around the starting cell before the first move.
+	grid.reveal_from(START_CELL)
+
 	var ui: CanvasLayer = NarratorUIScript.new()
 	ui.name = "NarratorUI"
 	add_child(ui)
