@@ -12,11 +12,13 @@ const CharacterSheetUIScript := preload("res://scripts/character_sheet_ui.gd")
 const PrimitivesScript := preload("res://scripts/primitives.gd")
 const MechanicRunnerScript := preload("res://scripts/mechanic_runner.gd")
 const TriggerSystemScript := preload("res://scripts/trigger_system.gd")
-const EnemyControllerScript := preload("res://scripts/enemy_controller.gd")
+const TurnSchedulerScript := preload("res://scripts/turn_scheduler.gd")
 const EntityRendererScript := preload("res://scripts/entity_renderer.gd")
 const LibraryScript := preload("res://scripts/library.gd")
 const InteractionSystemScript := preload("res://scripts/interaction_system.gd")
 const WinConditionScript := preload("res://scripts/win_condition.gd")
+const StatusHudScript := preload("res://scripts/status_hud.gd")
+const GameOverUIScript := preload("res://scripts/game_over_ui.gd")
 const Level := preload("res://scripts/level.gd")
 
 var _prim  # kept alive for the session; player/runner/triggers all share this one
@@ -34,7 +36,7 @@ func _ready() -> void:
 	CharacterSheet.create_default(Level.START)
 
 	# Vanilla runtime: Primitives + interpreter + Reflexes + interactions + win.
-	_prim = PrimitivesScript.new(grid)
+	_prim = PrimitivesScript.new()
 	var runner = MechanicRunnerScript.new(_prim)
 	var library = LibraryScript.new()
 
@@ -55,11 +57,12 @@ func _ready() -> void:
 
 	Level.build(_prim, triggers, library, interactions, win)
 
-	# Enemies take their turn after each player turn (ADR-0007).
-	var enemies: Node = EnemyControllerScript.new()
-	enemies.name = "EnemyController"
-	add_child(enemies)
-	enemies.setup(_prim)
+	# Time-based turn scheduler: every actor is independent; faster ones act more
+	# often (ADR-0007). Started after the level is built.
+	var scheduler: Node = TurnSchedulerScript.new()
+	scheduler.name = "TurnScheduler"
+	add_child(scheduler)
+	scheduler.setup(_prim)
 
 	# Entity view (enemies/items), under the player so the player draws on top.
 	var entities: Node2D = EntityRendererScript.new()
@@ -71,10 +74,17 @@ func _ready() -> void:
 	var player: Node2D = PlayerScript.new()
 	player.name = "Player"
 	grid.add_child(player)
-	player.setup(grid, _prim)
+	player.setup(grid, _prim, scheduler)
+
+	# Camera bound to the player: the map scrolls under a centered player (works at
+	# any map size — bigger maps just scroll further).
+	var cam := Camera2D.new()
+	cam.position_smoothing_enabled = true
+	player.add_child(cam)
 
 	grid.reveal_from(Level.START)
 	entities.queue_redraw()
+	scheduler.start()
 
 	var ui: CanvasLayer = NarratorUIScript.new()
 	ui.name = "NarratorUI"
@@ -88,7 +98,10 @@ func _ready() -> void:
 	sheet_ui.name = "CharacterSheetUI"
 	add_child(sheet_ui)
 
-	# Center the playfield in the window.
-	var playfield: Vector2 = Vector2(grid.GRID_W, grid.GRID_H) * grid.CELL
-	var viewport_size := Vector2(get_viewport_rect().size)
-	grid.position = (viewport_size - playfield) * 0.5
+	var status: CanvasLayer = StatusHudScript.new()
+	status.name = "StatusHud"
+	add_child(status)
+
+	var game_over: CanvasLayer = GameOverUIScript.new()
+	game_over.name = "GameOverUI"
+	add_child(game_over)

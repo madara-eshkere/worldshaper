@@ -24,34 +24,28 @@ def main() -> int:
         greeting = json.loads(ws.recv(timeout=5))
         assert greeting["type"] == "narration" and greeting["text"], greeting
 
-        # Moves are throttled to every 5th turn: turn 3 must be silent, turn 5 must speak.
-        ws.send(json.dumps({"type": "event", "name": "player_moved", "turn": 3, "data": {}}))
-        ws.send(json.dumps({"type": "event", "name": "player_moved", "turn": 5, "data": {}}))
-        move_line = json.loads(ws.recv(timeout=5))
-        assert move_line["type"] == "narration" and move_line["ref_turn"] == 5, move_line
-
         ws.send(json.dumps({"type": "event", "name": "fell_into_pit", "turn": 7, "data": {}}))
         pit = json.loads(ws.recv(timeout=5))
         assert "Яма" in pit["text"] or "яму" in pit["text"], pit
 
-        # Regression: the GM is silent on events it has no line for (ADR-0011).
-        # bumped_wall / stun_tick must produce NO narration — the old catch-all
-        # fallback spammed a reply on every wall bump and every stun tick.
-        ws.send(json.dumps({"type": "event", "name": "bumped_wall", "turn": 8, "data": {}}))
-        ws.send(json.dumps({"type": "event", "name": "stun_tick", "turn": 9, "data": {}}))
-        ws.send(json.dumps({"type": "event", "name": "player_interacted", "turn": 10, "data": {}}))
-        # The only reply should be for player_interacted — proving the two before it
-        # were silent (otherwise this recv would return a wall/stun fallback line).
+        # Regression: the GM is silent on events it has no line for (ADR-0011), and
+        # step-by-step movement is deliberately silent now (UX-1). player_moved /
+        # bumped_wall / stun_tick must produce NO narration.
+        ws.send(json.dumps({"type": "event", "name": "player_moved", "turn": 8, "data": {}}))
+        ws.send(json.dumps({"type": "event", "name": "bumped_wall", "turn": 9, "data": {}}))
+        ws.send(json.dumps({"type": "event", "name": "stun_tick", "turn": 10, "data": {}}))
+        ws.send(json.dumps({"type": "event", "name": "player_interacted", "turn": 11, "data": {}}))
+        # The only reply should be for player_interacted — proving the three before it
+        # were silent (otherwise this recv would return a move/wall/stun line).
         after_silence = json.loads(ws.recv(timeout=5))
-        assert after_silence["type"] == "narration" and after_silence["ref_turn"] == 10, (
+        assert after_silence["type"] == "narration" and after_silence["ref_turn"] == 11, (
             f"expected only player_interacted to speak; got {after_silence}"
         )
 
         print("SMOKE OK")
         print("  greeting :", greeting["text"])
-        print("  move@5   :", move_line["text"])
         print("  pit      :", pit["text"])
-        print("  wall/stun: (silent, as expected)")
+        print("  move/wall/stun: (silent, as expected)")
         print("  interact :", after_silence["text"])
     return 0
 

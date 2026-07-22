@@ -21,7 +21,7 @@ func _ready() -> void:
 	World.clear()
 	World.add_object("player", "player", Level.START, {"inventory": [], "str": 10}, [])
 
-	_prim = load("res://scripts/primitives.gd").new(_grid, 3)
+	_prim = load("res://scripts/primitives.gd").new(3)
 	var runner = load("res://scripts/mechanic_runner.gd").new(_prim)
 	var library = load("res://scripts/library.gd").new()
 	var triggers: Node = load("res://scripts/trigger_system.gd").new()
@@ -46,7 +46,7 @@ func _ready() -> void:
 	_expect(library.has("unscrew_table"), "library missing unscrew_table")
 
 	# geometry is solvable: the exit is reachable from the start (Validator check)
-	_expect(WinCondition.reachable(_grid.is_walkable, Level.START, Level.EXIT, _grid.GRID_W, _grid.GRID_H),
+	_expect(WinCondition.reachable(World.is_walkable, Level.START, Level.EXIT, World.map_w, World.map_h),
 			"exit should be reachable over walkable cells")
 
 	# the table blocks the doorway: stepping into it is a no-op, not a move

@@ -1,30 +1,43 @@
 extends Node2D
-## Grid-locked player with smooth-turn movement (ADR-0007). The player's data
-## (cell, stun, in_pit) lives in the World "player" object — this node is a view
-## over it (ADR-0013). Falling into a pit is no longer hardcoded here: it is a
-## Scripted Trigger (registered in main.gd) that fires on player_moved and runs
-## the pit Mechanic, which sets the stun on the World object (ADR-0014).
+## Grid-locked player (ADR-0007). Data (cell, stun, speed) lives in the World
+## "player" object (ADR-0013); this node is a view + input driver. Turn timing is
+## owned by the TurnScheduler — the player just performs ONE action when it's its
+## turn and reports it. Input is responsive: a press acts at once (a one-frame
+## coalesce catches a diagonal), holding repeats on a short cadence.
 
 const Combat = preload("res://scripts/combat.gd")
 
 const MOVE_TWEEN_SEC := 0.11
-const STUN_TICK_SEC := 0.35  # real time between auto-skipped stun turns
-const DIM := Color(0.55, 0.55, 0.62)  # player is down in the dark
+const STUN_TICK_SEC := 0.30
+const MOVE_REPEAT_SEC := 0.12  # cadence while a movement key is held
+const DIM := Color(0.55, 0.55, 0.62)
 
 var grid: Node2D
 var cell := Vector2i(2, 2)
 
 var _prim
+var _scheduler
 var _tween: Tween
 var _stun_accum := 0.0
+var _pending_move := false
+var _repeat := 0.0
 
 
-func setup(world_grid: Node2D, primitives) -> void:
+func setup(world_grid: Node2D, primitives, scheduler = null) -> void:
 	grid = world_grid
 	_prim = primitives
+	_scheduler = scheduler
 	if World.has("player"):
 		cell = World.raw("player")["cell"]
 	position = grid.cell_to_px(cell)
+	EventBus.game_event.connect(_on_game_event)
+
+
+func _on_game_event(name: String, _data: Dictionary) -> void:
+	if name == "player_died" or name == "level_complete":
+		if _tween and _tween.is_valid():
+			_tween.kill()
+		position = grid.cell_to_px(cell)  # snap to the real cell before the pause
 
 
 func _stun() -> int:
@@ -35,91 +48,107 @@ func _in_pit() -> bool:
 	return bool(_prim.get_prop("player", "in_pit", false)) if _prim else false
 
 
+func _my_turn() -> bool:
+	return _scheduler == null or _scheduler.is_player_turn()
+
+
+func _held_dir() -> Vector2i:
+	return Vector2i(
+		int(Input.is_action_pressed("move_right")) - int(Input.is_action_pressed("move_left")),
+		int(Input.is_action_pressed("move_down")) - int(Input.is_action_pressed("move_up")))
+
+
 func _process(delta: float) -> void:
 	if _prim == null:
 		return
 	modulate = DIM if _in_pit() else Color.WHITE
-	# Auto-skip: a stunned player's turns tick by themselves; no key-mashing.
 	if _stun() > 0:
 		_stun_accum += delta
 		if _stun_accum >= STUN_TICK_SEC:
 			_stun_accum = 0.0
 			_tick_stun()
+		return
+	if _tween and _tween.is_running():
+		return
+	var dir := _held_dir()
+	if _pending_move:
+		_pending_move = false
+		if dir != Vector2i.ZERO:
+			_step_now(dir)
+		return
+	if dir != Vector2i.ZERO:
+		_repeat -= delta
+		if _repeat <= 0.0:
+			_step_now(dir)
+	else:
+		_repeat = 0.0  # idle: the next press acts immediately
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _prim == null or not event.is_pressed() or event.is_echo():
 		return
-	# Ignore input mid-glide so a held key can't queue phantom turns.
-	if _tween and _tween.is_running():
+	if _stun() > 0 or not _my_turn():
 		return
-	# Stunned: the player can't act; _process auto-skips the turns. Swallow input.
-	if _stun() > 0:
+	if event.is_action("move_up") or event.is_action("move_down") \
+			or event.is_action("move_left") or event.is_action("move_right"):
+		_pending_move = true  # commit next frame so a near-simultaneous 2nd key = diagonal
+		return
+	if _tween and _tween.is_running():
 		return
 	if event.is_action("interact"):
 		_interact()
-		return
-	if event.is_action("wait"):
+	elif event.is_action("wait"):
 		_wait()
-		return
-	if event.is_action("use"):
+	elif event.is_action("use"):
 		_use_item()
+
+
+func _step_now(dir: Vector2i) -> void:
+	if not _my_turn():
 		return
-	var step := Vector2i.ZERO
-	if event.is_action("move_up"):
-		step = Vector2i.UP
-	elif event.is_action("move_down"):
-		step = Vector2i.DOWN
-	elif event.is_action("move_left"):
-		step = Vector2i.LEFT
-	elif event.is_action("move_right"):
-		step = Vector2i.RIGHT
-	if step != Vector2i.ZERO:
-		_try_step(step)
+	_repeat = MOVE_REPEAT_SEC
+	_try_step(dir)
 
 
 func _try_step(step: Vector2i) -> void:
-	# B-003: stun gates EVERY action — a stunned player can only wait it out.
 	if _stun() > 0:
 		_tick_stun()
 		return
 	var target := cell + step
-	# Bump-to-attack: stepping into an enemy attacks it instead of moving.
 	for oid in _prim.objects_at(target):
 		var tags: Array = _prim.get_object(oid).get("tags", [])
 		if "enemy" in tags:
-			Combat.attack(_prim, "player", oid)
-			_end_turn("player_attacked", {"target": oid})
+			Combat.attack(_prim, "player", oid)  # emits player_hit_enemy / enemy_slain
+			_spend_turn()
 			return
 		if "blocking" in tags:
-			# A blocking object (a table, a boulder) stops movement like a wall.
 			EventBus.emit_game_event("bumped_object", {"target": oid})
-			return
-	# B-001: bumping a wall is a no-op — it must NOT consume a turn.
-	if not grid.is_walkable(target):
+			return  # blocked — no turn
+	if not _prim.is_walkable(target):
 		EventBus.emit_game_event("bumped_wall", {"cell_x": target.x, "cell_y": target.y})
-		return
+		return  # wall — no turn
 	cell = target
-	_prim.move_to("player", cell)  # position lives in the World object
+	_prim.move_to("player", cell)
 	_glide_to(grid.cell_to_px(cell))
 	_pickup(cell)
-	# A pit Scripted Trigger listens on player_moved and reacts if this cell is one.
-	_end_turn("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
+	EventBus.emit_game_event("player_moved", {"cell_x": cell.x, "cell_y": cell.y})
+	_spend_turn()
 
 
 func _interact() -> void:
 	if _stun() > 0:
 		_tick_stun()
 		return
-	_end_turn("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
+	EventBus.emit_game_event("player_interacted", {"cell_x": cell.x, "cell_y": cell.y})
+	_spend_turn()
 
 
 func _wait() -> void:
-	# Spend a turn doing nothing (spacebar).
 	if _stun() > 0:
 		_tick_stun()
 		return
-	_end_turn("player_waited", {"cell_x": cell.x, "cell_y": cell.y})
+	EventBus.emit_game_event("player_waited", {"cell_x": cell.x, "cell_y": cell.y})
+	_spend_turn()
 
 
 func _use_item() -> void:
@@ -134,9 +163,10 @@ func _use_item() -> void:
 			var rest := inv.duplicate()
 			rest.remove_at(i)
 			_prim.set_prop("player", "inventory", rest)
-			_end_turn("used_item", {"item": item.get("name", "зелье")})
+			EventBus.emit_game_event("used_item", {"item": item.get("name", "зелье")})
+			_spend_turn()
 			return
-	_prim.emit("nothing_to_use", {})  # no usable item — not a turn
+	_prim.emit("nothing_to_use", {})  # nothing usable — not a turn
 
 
 func _pickup(at: Vector2i) -> void:
@@ -151,10 +181,8 @@ func _pickup(at: Vector2i) -> void:
 
 
 func _tick_stun() -> void:
-	# Burn one turn doing nothing. When the stun runs out in the pit, the player
-	# climbs out automatically — so a 2-turn stun costs 2 skips, not 3 (B-002).
-	# M1 placeholder; M4 replaces climbing with a check-based Declared action.
-	TurnManager.advance()
+	# Helpless: the player spends the turn ticking down the stun (climbs out of a pit
+	# automatically when it expires — a 2-turn stun costs 2 skips, not 3, B-002).
 	var s := _stun() - 1
 	_prim.set_prop("player", "stunned_turns", s)
 	if s <= 0 and _in_pit():
@@ -162,15 +190,13 @@ func _tick_stun() -> void:
 		EventBus.emit_game_event("climbed_out_of_pit", {})
 	else:
 		EventBus.emit_game_event("stun_tick", {"remaining": s})
-	EventBus.emit_game_event("player_turn_ended", {})  # enemies act while you're stunned
+	_spend_turn()
 
 
-func _end_turn(event_name: String, data: Dictionary) -> void:
-	# One player action = one turn. Emit the action event, then signal end-of-turn
-	# so the enemy controller can act (ADR-0007).
+func _spend_turn() -> void:
 	TurnManager.advance()
-	EventBus.emit_game_event(event_name, data)
-	EventBus.emit_game_event("player_turn_ended", {})
+	if _scheduler != null:
+		_scheduler.player_acted()  # hands control to the scheduler (mobs act)
 
 
 func _glide_to(target_px: Vector2) -> void:

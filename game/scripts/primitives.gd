@@ -17,13 +17,11 @@ const PRIMITIVE_NAMES := [
 	"remove_tag", "damage", "heal", "roll_check", "emit",
 ]
 
-var _grid: Node  # provides is_walkable(cell)
 var _rng := RandomNumberGenerator.new()
 var _next_id := 1
 
 
-func _init(grid: Node, rng_seed: int = 0) -> void:
-	_grid = grid
+func _init(rng_seed: int = 0) -> void:
 	if rng_seed != 0:
 		_rng.seed = rng_seed
 	else:
@@ -63,7 +61,7 @@ func find_by_tag(tag: String) -> Array:
 
 
 func is_walkable(cell: Vector2i) -> bool:
-	return _grid.is_walkable(cell)
+	return World.is_walkable(cell)
 
 
 func player_cell() -> Vector2i:
@@ -77,7 +75,7 @@ func distance(a: Vector2i, b: Vector2i) -> int:
 # --- Spawn / remove ---
 
 func spawn(type: String, cell: Vector2i, props: Dictionary = {}, tags: Array = []) -> String:
-	if not _grid.is_walkable(cell):
+	if not World.is_walkable(cell):
 		_reject("spawn on non-walkable cell %s" % cell)
 		return ""
 	var id := "%s_%d" % [type, _next_id]
@@ -100,7 +98,7 @@ func move_to(id: String, cell: Vector2i) -> bool:
 	if not World.has(id):
 		_reject("move missing id %s" % id)
 		return false
-	if not _grid.is_walkable(cell):
+	if not World.is_walkable(cell):
 		_reject("move %s onto non-walkable %s" % [id, cell])
 		return false
 	World.set_cell(id, cell)
@@ -150,8 +148,11 @@ func heal(id: String, amount: int) -> bool:
 	if not World.has(id) or amount < 0:
 		_reject("heal bad args %s %d" % [id, amount])
 		return false
-	var hp := int(get_prop(id, "hp", 0))
-	World.set_prop(id, "hp", hp + amount)
+	var hp := int(get_prop(id, "hp", 0)) + amount
+	var hp_max: Variant = get_prop(id, "hp_max", null)  # cap at hp_max if the object has one
+	if hp_max != null:
+		hp = mini(int(hp_max), hp)
+	World.set_prop(id, "hp", hp)
 	return true
 
 

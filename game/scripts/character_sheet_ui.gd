@@ -45,6 +45,7 @@ func _refresh() -> void:
 	var lines: Array[String] = []
 	lines.append("%s %s, ур. %d" % [p.get("race", "?"), p.get("class", "?"), int(p.get("level", 1))])
 	lines.append("HP: %d/%d    XP: %d" % [int(p.get("hp", 0)), int(p.get("hp_max", 0)), int(p.get("xp", 0))])
+	lines.append("Скорость: %d  (ходит чаще при большей)" % int(p.get("speed", 1)))
 	lines.append("")
 	for a in ABILITIES:
 		var score := int(p.get(a, 10))

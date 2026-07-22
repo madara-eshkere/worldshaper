@@ -5,6 +5,7 @@ extends Node
 ## consumes a turn), plus the pit fall firing through the trigger, not hardcode.
 ##   godot --headless --path game res://tests/test_turn_loop.tscn
 
+const PIT := Vector2i(11, 4)
 const PIT_FALL := {"id": "pit_fall", "steps": [
 	{"prim": "set_prop", "args": ["$actor", "stunned_turns", 2]},
 	{"prim": "set_prop", "args": ["$actor", "in_pit", true]},
@@ -23,14 +24,15 @@ func _ready() -> void:
 	_grid = load("res://scripts/world_grid.gd").new()
 	add_child(_grid)
 	World.clear()
+	World.set_map(16, 10, load("res://tests/test_helpers.gd").bordered_map())
 	World.add_object("player", "player", Vector2i(2, 2), {}, [])
 
-	_prim = load("res://scripts/primitives.gd").new(_grid, 42)
+	_prim = load("res://scripts/primitives.gd").new(42)
 	var runner = load("res://scripts/mechanic_runner.gd").new(_prim)
 	var triggers: Node = load("res://scripts/trigger_system.gd").new()
 	add_child(triggers)
 	triggers.setup(_prim, runner)
-	_prim.spawn("pit", _grid.PIT_CELL, {}, ["pit"])
+	_prim.spawn("pit", PIT, {}, ["pit"])
 	triggers.register_trigger({"on": "player_moved", "if": {"cell_has_tag": "pit"}, "mechanic": PIT_FALL})
 
 	_player = load("res://scripts/player.gd").new()
@@ -58,7 +60,7 @@ func _ready() -> void:
 	_expect(_events.has("player_interacted"), "T3 expected player_interacted, got %s" % str(_events))
 
 	# T4 — stepping onto the pit fires the trigger: fall, stun 2, step spends a turn.
-	_reset(Vector2i(_grid.PIT_CELL.x - 1, _grid.PIT_CELL.y))
+	_reset(Vector2i(PIT.x - 1, PIT.y))
 	_player._try_step(Vector2i.RIGHT)
 	_expect(_in_pit(), "T4 not in pit after stepping onto it")
 	_expect(_stun() == 2, "T4 stunned=%d (want 2)" % _stun())
@@ -88,7 +90,7 @@ func _ready() -> void:
 	_expect(_events.has("player_waited"), "T7 expected player_waited, got %s" % str(_events))
 
 	# T8 — auto-skip: _process ticks a pit stun to zero with no key presses.
-	_reset(Vector2i(_grid.PIT_CELL.x - 1, _grid.PIT_CELL.y))
+	_reset(Vector2i(PIT.x - 1, PIT.y))
 	_player._try_step(Vector2i.RIGHT)  # fall in → stunned 2
 	_expect(_stun() == 2, "T8 setup stunned=%d (want 2)" % _stun())
 	_events.clear()

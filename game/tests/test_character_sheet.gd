@@ -12,9 +12,7 @@ var _fails: Array[String] = []
 
 func _ready() -> void:
 	EventBus.game_event.connect(func(n: String, _d: Dictionary): _events.append(n))
-	var grid: Node2D = load("res://scripts/world_grid.gd").new()
-	add_child(grid)
-	var p = load("res://scripts/primitives.gd").new(grid, 999)
+	var p = load("res://scripts/primitives.gd").new(999)
 
 	# d20 modifier formula
 	_expect(D20.ability_mod(10) == 0, "mod(10) should be 0")

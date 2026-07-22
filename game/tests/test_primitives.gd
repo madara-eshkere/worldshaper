@@ -9,12 +9,11 @@ var _fails: Array[String] = []
 
 func _ready() -> void:
 	EventBus.game_event.connect(func(n: String, _d: Dictionary): _events.append(n))
-	var grid: Node2D = load("res://scripts/world_grid.gd").new()
-	add_child(grid)
 	var Primitives := load("res://scripts/primitives.gd")
-	var p = Primitives.new(grid, 12345)  # fixed seed → deterministic rolls
+	var p = Primitives.new(12345)  # fixed seed → deterministic rolls
 
 	World.clear()
+	World.set_map(16, 10, load("res://tests/test_helpers.gd").bordered_map())
 	World.add_object("player", "player", Vector2i(2, 2), {"hp": 10, "str": 20}, [])
 
 	# spawn returns an id, object is queryable

@@ -8,15 +8,14 @@ var _fails: Array[String] = []
 
 func _ready() -> void:
 	EventBus.game_event.connect(func(n: String, _d: Dictionary): _events.append(n))
-	var grid: Node2D = load("res://scripts/world_grid.gd").new()
-	add_child(grid)
-	var prim = load("res://scripts/primitives.gd").new(grid, 42)
+	var prim = load("res://scripts/primitives.gd").new(42)
 	var runner = load("res://scripts/mechanic_runner.gd").new(prim)
 	var triggers: Node = load("res://scripts/trigger_system.gd").new()
 	add_child(triggers)
 	triggers.setup(prim, runner)
 
 	World.clear()
+	World.set_map(16, 10, load("res://tests/test_helpers.gd").bordered_map())
 	World.add_object("player", "player", Vector2i(2, 2), {"hp": 10}, [])
 
 	# --- interpreter: steps run as Primitive calls, $vars resolve from ctx ---

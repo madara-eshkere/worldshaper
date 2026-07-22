@@ -1,25 +1,41 @@
 extends CanvasLayer
-## Dev-only HUD: turn counter + last semantic event, so turn accounting is
-## visible during playtests (the player asked for this — turns were invisible).
-## Not shipping UI — remove/gate before release.
+## Dev-only event log: a small scrolling window of recent semantic events + the turn
+## number, so turn accounting and event flow are visible during playtests. The
+## internal player_turn_ended signal is filtered out (redundant with the action
+## event). Not shipping UI — remove/gate before release.
 
-var _label: Label
-var _last_event := "-"
+const MAX_LINES := 40
+const SKIP := ["player_turn_ended"]
+
+var _log: RichTextLabel
+var _lines: Array[String] = []
 
 
 func _ready() -> void:
 	layer = 20
-	_label = Label.new()
-	_label.position = Vector2(12, 8)
-	_label.add_theme_font_size_override("font_size", 16)
-	_label.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
-	add_child(_label)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(10, 8)
+	add_child(panel)
+	_log = RichTextLabel.new()
+	_log.custom_minimum_size = Vector2(330, 150)
+	_log.bbcode_enabled = false
+	_log.scroll_active = true
+	_log.scroll_following = true
+	_log.add_theme_font_size_override("normal_font_size", 12)
+	_log.add_theme_color_override("default_color", Color(0.6, 1.0, 0.6))
+	panel.add_child(_log)
 	EventBus.game_event.connect(_on_event)
+	_render()
 
 
-func _process(_delta: float) -> void:
-	_label.text = "DEBUG  turn: %d   last: %s" % [TurnManager.turn, _last_event]
+func _on_event(name: String, _data: Dictionary) -> void:
+	if name in SKIP:
+		return
+	_lines.append("t%d  %s" % [TurnManager.turn, name])
+	if _lines.size() > MAX_LINES:
+		_lines.pop_front()
+	_render()
 
 
-func _on_event(event_name: String, _data: Dictionary) -> void:
-	_last_event = event_name
+func _render() -> void:
+	_log.text = "DEBUG · ход %d\n" % TurnManager.turn + "\n".join(_lines)

@@ -5,6 +5,7 @@ extends RefCounted
 ## source of truth (ADR-0013). Static helpers; preload, not an autoload.
 
 const D20 = preload("res://scripts/d20.gd")
+const Speed = preload("res://scripts/speed.gd")
 
 # Simplified d20 abilities (user 2026-07-18): WIS folded into INT (it would only
 # have driven a manapool), PER added because this is a top-down trap-heavy game.
@@ -31,6 +32,7 @@ static func create(id: String, race: String, cls: String, abilities: Dictionary,
 	# Derived combat stats + empty inventory (used by combat.gd / pickups, #7).
 	props["atk"] = 2 + D20.ability_mod(int(props["str"]))
 	props["def"] = 10 + D20.ability_mod(int(props["dex"]))
+	props["speed"] = Speed.for_dex(int(props["dex"]))  # turn order + cells/turn
 	props["inventory"] = []
 	if World.has(id):
 		for k in props:

@@ -5,6 +5,13 @@ extends RefCounted
 ## the exit. Seeds the Vanilla Library and wires the pit trigger, the interaction,
 ## and the win predicate. Zero LLM.
 
+const Bestiary = preload("res://scripts/bestiary.gd")
+
+const W := 16
+const H := 10
+const DIVIDER_X := 8
+const DOORWAY_Y := 4
+
 const START := Vector2i(2, 2)
 const EXIT := Vector2i(14, 4)
 const TABLE_CELL := Vector2i(8, 4)   # the doorway in the divider wall
@@ -12,13 +19,16 @@ const PIT_CELL := Vector2i(5, 6)
 
 
 static func build(prim, triggers, library, interactions, win) -> void:
+	_build_map()
 	_seed_library(library)
 
 	prim.spawn("item", Vector2i(4, 3), {"name": "отвёртка", "item_key": "screwdriver"}, ["item"])
 	prim.spawn("pit", PIT_CELL, {}, ["pit"])
 	prim.spawn("table", TABLE_CELL, {"name": "стол"}, ["table", "interactable", "blocking"])
-	prim.spawn("enemy", Vector2i(11, 5), {"hp": 6, "atk": 3, "def": 11, "str": 8, "name": "гоблин"},
-			["enemy", "blocking"])
+	# Creatures from the bestiary (data-driven). Goblin: slower than the player.
+	# Bat: fast flyer (speed 8) — acts more often and glides over pits.
+	Bestiary.spawn(prim, "goblin", Vector2i(11, 5))
+	Bestiary.spawn(prim, "bat", Vector2i(12, 7))
 	prim.spawn("item", Vector2i(11, 2), {"name": "зелье лечения", "heal": 5}, ["item"])
 	prim.spawn("exit", EXIT, {"name": "выход"}, ["exit"])
 
@@ -35,6 +45,19 @@ static func build(prim, triggers, library, interactions, win) -> void:
 	win.set_predicate({"player_at": EXIT})
 
 
+## Author the tile map as DATA in World State (M2: the Director generates this).
+## Border walls + an interior divider with one doorway (which the table blocks).
+static func _build_map() -> void:
+	var tiles := PackedByteArray()
+	tiles.resize(W * H)
+	for y in H:
+		for x in W:
+			var wall := (x == 0 or y == 0 or x == W - 1 or y == H - 1) \
+					or (x == DIVIDER_X and y != DOORWAY_Y)
+			tiles[y * W + x] = 1 if wall else 0
+	World.set_map(W, H, tiles)
+
+
 ## Seed the Vanilla Library. Two Mechanics are wired to this level (pit_fall,
 ## unscrew_table); the rest are base interaction recipes available to future
 ## levels — the library is meant to grow (ADR-0014).
@@ -42,6 +65,7 @@ static func _seed_library(library) -> void:
 	library.add({"id": "pit_fall", "steps": [
 		{"prim": "set_prop", "args": ["$actor", "stunned_turns", 2]},
 		{"prim": "set_prop", "args": ["$actor", "in_pit", true]},
+		{"prim": "set_prop", "args": ["$target", "revealed", true]},
 		{"prim": "emit", "args": ["fell_into_pit", {"stun_turns": 2}]},
 	]})
 	library.add({"id": "unscrew_table", "steps": [

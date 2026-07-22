@@ -22,6 +22,9 @@ var _spawned_pid := -1
 
 
 func _ready() -> void:
+	# Keep polling the sidecar even when the tree is paused (game over), so the
+	# death/victory narration still arrives and can be shown over the overlay.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	EventBus.game_event.connect(_on_game_event)
 	# The game owns the sidecar (ADR-0002): launch it proactively at boot.
 	# If one is already running (dev mode), the duplicate dies on port bind.
